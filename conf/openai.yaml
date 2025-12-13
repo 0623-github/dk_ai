@@ -1,2 +1,2 @@
 model: "gemma:2b"
-baseURL: "http://localhost:11434"
+baseURL: "http://localhost:11434/v1"
