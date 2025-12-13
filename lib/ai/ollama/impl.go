@@ -43,7 +43,7 @@ func NewImpl(ctx context.Context) *Impl {
 		},
 	})
 	if err != nil {
-		panic(err)
+		panic("create chat completion failed: model " + conf.Model + ", baseURL: " + conf.BaseURL + ", err: " + err.Error())
 	}
 	if len(resp.Choices) == 0 {
 		panic("no choices")
