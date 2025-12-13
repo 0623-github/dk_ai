@@ -1,11 +1,12 @@
 module github.com/0623-github/dk_ai
 
-go 1.25.4
+go 1.24
 
 require (
 	github.com/cloudwego/hertz v0.10.3
 	github.com/cloudwego/hertz/cmd/hz v0.9.7
 	github.com/sashabaranov/go-openai v1.41.2
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -26,5 +27,4 @@ require (
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/sys v0.24.0 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
