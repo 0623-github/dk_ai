@@ -7,6 +7,7 @@ import (
 
 	handler "github.com/0623-github/dk_ai/biz/handler"
 	"github.com/0623-github/dk_ai/biz/wrapper"
+	app "github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
 )
 
@@ -14,7 +15,10 @@ func main() {
 	h := server.New(server.WithHostPorts(":9090"))
 
 	// 添加静态文件服务配置，提供前端页面访问
-	h.StaticFS("/", "fe")
+	h.StaticFile("/", "fe/index.html")
+	h.StaticFS("/static", &app.FS{
+		Root: "fe",
+	})
 
 	wrapper := wrapper.NewImpl(context.Background())
 	handler := &handler.Handler{Wrapper: wrapper}
