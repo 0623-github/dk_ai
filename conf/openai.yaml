@@ -1,2 +1,2 @@
-model: "llama2:2b"
-baseURL: "http://localhost:1234"
+model: "gemma:2b"
+baseURL: "http://localhost:11434"

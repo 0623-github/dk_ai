@@ -33,7 +33,7 @@ else
 fi
 
 # 编译
-go build -o "$OUTPUT_BIN" main.go
+go build -o "$OUTPUT_BIN"
 
 echo "=== 复制配置文件 ==="
 # 复制配置文件到输出目录
