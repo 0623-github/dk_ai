@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	h := server.Default()
+	h := server.New(server.WithHostPorts(":9090"))
 	wrapper := wrapper.NewImpl(context.Background())
 	handler := &handler.Handler{Wrapper: wrapper}
 	register(h, handler)
