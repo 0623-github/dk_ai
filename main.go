@@ -12,7 +12,8 @@ import (
 )
 
 func main() {
-	h := server.New(server.WithHostPorts(":9090"))
+	// 监听所有网络接口的9090端口，确保外部可以访问
+	h := server.New(server.WithHostPorts("0.0.0.0:9090"))
 
 	// 添加静态文件服务配置，提供前端页面访问
 	h.StaticFile("/", "fe/index.html")
