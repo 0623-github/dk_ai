@@ -40,6 +40,11 @@ echo "=== 复制配置文件 ==="
 mkdir -p "$OUTPUT_DIR/conf"
 cp -r conf/* "$OUTPUT_DIR/conf/"
 
+# 复制前端文件到输出目录
+echo "=== 复制前端文件 ==="
+mkdir -p "$OUTPUT_DIR/fe"
+cp -r fe/* "$OUTPUT_DIR/fe/"
+
 echo "=== 编译完成 ==="
 echo "输出文件: $OUTPUT_BIN"
 echo "配置文件目录: $OUTPUT_DIR/conf/"
