@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 启动脚本 - 用于启动编译后的Go应用
+# 启动脚本 - 用于启动编译后的 Go 应用
 set -e
 
 echo "=== 开始启动服务 ==="
@@ -31,6 +31,13 @@ if [ ! -d "$CONFIG_DIR" ]; then
     exit 1
 fi
 
+# 检查前端文件目录
+FE_DIR="$OUTPUT_DIR/fe"
+if [ ! -d "$FE_DIR" ]; then
+    echo "错误: 前端文件目录不存在，请先运行编译脚本"
+    exit 1
+fi
+
 # 设置环境变量
 export GO_ENV=production
 export APP_HOME="$OUTPUT_DIR"
@@ -39,18 +46,16 @@ export CONFIG_PATH="$CONFIG_DIR"
 echo "=== 服务信息 ==="
 echo "应用路径: $BINARY_PATH"
 echo "配置目录: $CONFIG_DIR"
+echo "前端目录: $FE_DIR"
 echo "环境变量: GO_ENV=$GO_ENV"
 
 # 启动应用
 echo "=== 启动应用 ==="
 cd "$OUTPUT_DIR"
 
-# 如果是开发环境，可以使用以下方式运行(开发模式)
-# go run "$PROJECT_DIR/main.go"
-
-# 生产环境运行编译后的二进制文件
+# 生产环境运行编译后的二进制文件（前端已内置）
 "$BINARY_PATH"
 
-# 注意：如果需要后台运行，可以使用以下命令
-# nohup "$BINARY_PATH" > app.log 2>&1 &
 echo "=== 服务启动完成 ==="
+echo ""
+echo "访问地址: http://localhost:9090"
