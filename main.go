@@ -5,24 +5,31 @@ package main
 import (
 	"context"
 
-	handler "github.com/0623-github/dk_ai/biz/handler"
+	"github.com/0623-github/dk_ai/biz/handler"
 	"github.com/0623-github/dk_ai/biz/wrapper"
-	app "github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
+	"github.com/hertz-contrib/cors"
 )
 
 func main() {
-	// 监听所有网络接口的9090端口，确保外部可以访问
 	h := server.New(server.WithHostPorts("0.0.0.0:9090"))
 
-	// 添加静态文件服务配置，提供前端页面访问
+	h.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
+
 	h.StaticFile("/", "fe/index.html")
 	h.StaticFS("/static", &app.FS{
 		Root: "fe",
 	})
 
-	wrapper := wrapper.NewImpl(context.Background())
-	handler := &handler.Handler{Wrapper: wrapper}
-	register(h, handler)
+	w := wrapper.NewImpl(context.Background())
+	h2 := &handler.Handler{Wrapper: w}
+	register(h, h2)
 	h.Spin()
 }

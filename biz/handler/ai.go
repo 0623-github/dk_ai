@@ -10,11 +10,19 @@ import (
 
 func (h *Handler) Chat(ctx context.Context, c *app.RequestContext) {
 	req := &wrapper.ChatRequest{}
-	handlerWrapper(ctx, c, func(ctx context.Context) (int, interface{}, error) {
-		resp, err := h.Wrapper.Chat(ctx, *req)
-		if err != nil {
-			return consts.StatusInternalServerError, nil, err
-		}
-		return consts.StatusOK, resp, nil
-	})
+	if err := c.Bind(req); err != nil {
+		c.JSON(consts.StatusBadRequest, wrapper.ChatResp{
+			Reply: "Invalid request",
+		})
+		return
+	}
+
+	resp, err := h.Wrapper.Chat(ctx, *req)
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, wrapper.ChatResp{
+			Reply: err.Error(),
+		})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
