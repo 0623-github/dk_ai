@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/0623-github/dk_ai/biz/handler"
 	"github.com/0623-github/dk_ai/biz/wrapper"
@@ -23,9 +24,14 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	h.StaticFile("/", "fe/index.html")
+	// 优先使用生产环境路径，不存在则使用开发环境路径
+	feRoot := "fe"
+	if _, err := os.Stat("fe/index.html"); os.IsNotExist(err) {
+		feRoot = "fe-react/dist"
+	}
+	h.StaticFile("/", feRoot+"/index.html")
 	h.StaticFS("/static", &app.FS{
-		Root: "fe",
+		Root: feRoot,
 	})
 
 	w := wrapper.NewImpl(context.Background())
