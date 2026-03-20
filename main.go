@@ -8,12 +8,20 @@ import (
 
 	"github.com/0623-github/dk_ai/biz/handler"
 	"github.com/0623-github/dk_ai/biz/wrapper"
+	"github.com/0623-github/dk_ai/lib/db"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/hertz-contrib/cors"
 )
 
 func main() {
+	// 初始化数据库
+	database, err := db.New("data/dk_ai.db")
+	if err != nil {
+		panic(err)
+	}
+	defer database.Close()
+
 	h := server.New(server.WithHostPorts("0.0.0.0:9090"))
 
 	h.Use(cors.New(cors.Config{
@@ -34,7 +42,7 @@ func main() {
 		Root: feRoot,
 	})
 
-	w := wrapper.NewImpl(context.Background())
+	w := wrapper.NewImpl(context.Background(), database)
 	h2 := &handler.Handler{Wrapper: w}
 	register(h, h2)
 	h.Spin()

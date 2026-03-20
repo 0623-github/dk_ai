@@ -9,7 +9,20 @@ import (
 
 // customizeRegister registers customize routers.
 func customizedRegister(r *server.Hertz, wrapper *handler.Handler) {
+	// 健康检查
 	r.GET("/ping", handler.Ping)
-	r.POST("/chat", wrapper.Chat)
 
+	// 聊天接口
+	r.POST("/chat", wrapper.Chat)
+	r.POST("/chat/stream", wrapper.ChatStream)
+
+	// 会话管理
+	r.POST("/api/sessions", wrapper.CreateSession)
+	r.GET("/api/sessions", wrapper.ListSessions)
+	r.GET("/api/session", wrapper.GetSession)
+	r.PUT("/api/sessions/:id", wrapper.UpdateSession)
+	r.DELETE("/api/sessions/:id", wrapper.DeleteSession)
+
+	// 消息管理
+	r.GET("/api/messages", wrapper.GetMessages)
 }

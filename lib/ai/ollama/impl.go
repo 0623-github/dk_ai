@@ -66,14 +66,9 @@ func (i *Impl) Chat(ctx context.Context, req ai.ChatRequest) (string, error) {
 		return i.mockChat(req.Message), nil
 	}
 
-	messages, err := i.cache.Get(req.User)
-	if err != nil {
-		return "", err
-	}
-	messages = append(messages, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleUser,
-		Content: req.Message,
-	})
+	// 构建消息列表（历史 + 当前消息）
+	messages := i.buildMessages(req)
+
 	resp, err := i.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:    i.model,
 		Messages: messages,
@@ -88,12 +83,77 @@ func (i *Impl) Chat(ctx context.Context, req ai.ChatRequest) (string, error) {
 	if firstChoice.Message.Content == "" {
 		return "", errors.New("empty content")
 	}
-	messages = append(messages, firstChoice.Message)
-	err = i.cache.Set(req.User, messages, 0)
-	if err != nil {
-		return "", err
-	}
+
 	return firstChoice.Message.Content, nil
+}
+
+// ChatStream 流式聊天实现
+func (i *Impl) ChatStream(ctx context.Context, req ai.ChatRequest, callback func(string, bool)) error {
+	if i.mockMode {
+		// 模拟模式下逐字输出
+		reply := i.mockChat(req.Message)
+		for j, char := range reply {
+			callback(string(char), j == len(reply)-1)
+		}
+		return nil
+	}
+
+	// 构建消息列表
+	messages := i.buildMessages(req)
+
+	stream, err := i.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
+		Model:    i.model,
+		Messages: messages,
+		Stream:   true,
+	})
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	for {
+		response, err := stream.Recv()
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			return err
+		}
+		if len(response.Choices) > 0 {
+			content := response.Choices[0].Delta.Content
+			callback(content, false)
+		}
+	}
+
+	callback("", true) // 发送完成标记
+	return nil
+}
+
+// buildMessages 构建 OpenAI 格式的消息列表
+func (i *Impl) buildMessages(req ai.ChatRequest) []openai.ChatCompletionMessage {
+	messages := make([]openai.ChatCompletionMessage, 0)
+
+	// 添加历史消息
+	for _, h := range req.History {
+		role := openai.ChatMessageRoleUser
+		if h.Role == "assistant" {
+			role = openai.ChatMessageRoleAssistant
+		} else if h.Role == "system" {
+			role = openai.ChatMessageRoleSystem
+		}
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    role,
+			Content: h.Content,
+		})
+	}
+
+	// 添加当前消息
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleUser,
+		Content: req.Message,
+	})
+
+	return messages
 }
 
 var mockResponses = []string{
@@ -106,7 +166,7 @@ var mockResponses = []string{
 
 func (i *Impl) mockChat(message string) string {
 	msg := strings.ToLower(message)
-	
+
 	if strings.Contains(msg, "你好") || strings.Contains(msg, "hello") || strings.Contains(msg, "hi") {
 		return "你好！很高兴见到你！有什么我可以帮助你的吗？"
 	}
@@ -119,6 +179,6 @@ func (i *Impl) mockChat(message string) string {
 	if strings.Contains(msg, "帮助") || strings.Contains(msg, "能做什么") {
 		return "我可以帮你：\n1. 回答问题\n2. 聊天对话\n3. 提供信息\n4. 编写代码\n\n注意：当前是模拟模式，启动 Ollama 后可获得更智能的回答。"
 	}
-	
+
 	return mockResponses[len(message)%len(mockResponses)]
 }

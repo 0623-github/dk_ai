@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
-import { MessageCircle, Plus, Trash2, Send, Bot, User, Sparkles, X, Menu } from 'lucide-react'
+import { MessageCircle, Plus, Trash2, Send, Bot, User, Sparkles, Menu } from 'lucide-react'
 
 const API_BASE = import.meta.env.PROD ? '/api' : 'http://localhost:9090'
 
 function App() {
   const [sessions, setSessions] = useState([])
   const [currentSession, setCurrentSession] = useState(null)
+  const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [connected, setConnected] = useState(false)
@@ -18,23 +19,17 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (currentSession) {
+      loadMessages(currentSession.id)
+    }
+  }, [currentSession])
+
+  useEffect(() => {
     scrollToBottom()
-  }, [currentSession?.messages])
+  }, [messages])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  const loadSessions = () => {
-    const stored = localStorage.getItem('chat_sessions')
-    if (stored) {
-      setSessions(JSON.parse(stored))
-    }
-  }
-
-  const saveSessions = (newSessions) => {
-    localStorage.setItem('chat_sessions', JSON.stringify(newSessions))
-    setSessions(newSessions)
   }
 
   const checkConnection = async () => {
@@ -46,41 +41,87 @@ function App() {
     }
   }
 
-  const createSession = () => {
-    const newSession = {
-      id: `session_${Date.now()}`,
-      title: '新会话',
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now()
+  const loadSessions = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/sessions`)
+      const data = await res.json()
+      setSessions(data.sessions || [])
+    } catch (error) {
+      console.error('Failed to load sessions:', error)
     }
-    const newSessions = [newSession, ...sessions]
-    saveSessions(newSessions)
-    setCurrentSession(newSession)
+  }
+
+  const loadMessages = async (sessionId) => {
+    try {
+      const res = await fetch(`${API_BASE}/messages?session_id=${sessionId}`)
+      const data = await res.json()
+      // 转换消息格式
+      const formattedMessages = (data.messages || []).map(m => ({
+        role: m.role,
+        content: m.content,
+        timestamp: new Date(m.created_at).getTime()
+      }))
+      setMessages(formattedMessages)
+    } catch (error) {
+      console.error('Failed to load messages:', error)
+    }
+  }
+
+  const createSession = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: '新会话' })
+      })
+      const session = await res.json()
+      setSessions([session, ...sessions])
+      setCurrentSession(session)
+      setMessages([])
+    } catch (error) {
+      console.error('Failed to create session:', error)
+    }
   }
 
   const selectSession = (session) => {
     setCurrentSession(session)
   }
 
-  const deleteSession = (e, sessionId) => {
+  const deleteSession = async (e, sessionId) => {
     e.stopPropagation()
-    const newSessions = sessions.filter(s => s.id !== sessionId)
-    saveSessions(newSessions)
-    if (currentSession?.id === sessionId) {
-      setCurrentSession(newSessions[0] || null)
+    try {
+      await fetch(`${API_BASE}/sessions/${sessionId}`, { method: 'DELETE' })
+      const newSessions = sessions.filter(s => s.id !== sessionId)
+      setSessions(newSessions)
+      if (currentSession?.id === sessionId) {
+        setCurrentSession(newSessions[0] || null)
+        setMessages([])
+      }
+    } catch (error) {
+      console.error('Failed to delete session:', error)
     }
   }
 
-  const clearSession = () => {
+  const clearSession = async () => {
     if (!currentSession) return
-    const newSessions = sessions.map(s => 
-      s.id === currentSession.id 
-        ? { ...s, messages: [], title: '新会话', updatedAt: Date.now() }
-        : s
-    )
-    saveSessions(newSessions)
-    setCurrentSession({ ...currentSession, messages: [], title: '新会话' })
+    // 删除并重新创建会话
+    try {
+      await fetch(`${API_BASE}/sessions/${currentSession.id}`, { method: 'DELETE' })
+      const res = await fetch(`${API_BASE}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: '新会话' })
+      })
+      const newSession = await res.json()
+      const newSessions = sessions.map(s => 
+        s.id === currentSession.id ? newSession : s
+      )
+      setSessions(newSessions)
+      setCurrentSession(newSession)
+      setMessages([])
+    } catch (error) {
+      console.error('Failed to clear session:', error)
+    }
   }
 
   const sendMessage = async () => {
@@ -88,71 +129,55 @@ function App() {
 
     let session = currentSession
     if (!session) {
-      const newSession = {
-        id: `session_${Date.now()}`,
-        title: '新会话',
-        messages: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now()
+      // 自动创建会话
+      try {
+        const res = await fetch(`${API_BASE}/sessions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: input.trim().slice(0, 20) })
+        })
+        session = await res.json()
+        setSessions([session, ...sessions])
+        setCurrentSession(session)
+      } catch (error) {
+        console.error('Failed to create session:', error)
+        return
       }
-      const newSessions = [newSession, ...sessions]
-      saveSessions(newSessions)
-      setCurrentSession(newSession)
-      session = newSession
     }
-    
+
     const userMessage = {
       role: 'user',
       content: input.trim(),
       timestamp: Date.now()
     }
-    
-    const updatedSession = {
-      ...session,
-      messages: [...session.messages, userMessage],
-      updatedAt: Date.now()
-    }
-    
-    if (session.title === '新会话') {
-      updatedSession.title = input.trim().slice(0, 20) + (input.trim().length > 20 ? '...' : '')
-    }
-    
-    setCurrentSession(updatedSession)
-    const newSessions = sessions.map(s => s.id === session.id ? updatedSession : s)
-    saveSessions(newSessions)
-    
+
+    setMessages(prev => [...prev, userMessage])
     setInput('')
     setLoading(true)
-    
+
     try {
       const res = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           session_id: session.id,
-          message: "请用中文回复：" + userMessage.content,
+          message: userMessage.content,
           mode: 'text'
         })
       })
-      
+
       const data = await res.json()
       const assistantMessage = {
         role: 'assistant',
         content: data.reply || '无响应',
         timestamp: Date.now()
       }
+
+      setMessages(prev => [...prev, assistantMessage])
       
-      const finalSession = {
-        ...updatedSession,
-        messages: [...updatedSession.messages, assistantMessage]
-      }
-      setCurrentSession(finalSession)
-      
-      const finalSessions = newSessions.map(s => 
-        s.id === session.id ? finalSession : s
-      )
-      saveSessions(finalSessions)
-      
+      // 刷新会话列表（更新标题和时间）
+      loadSessions()
+
     } catch (error) {
       console.error('Error:', error)
       const errorMessage = {
@@ -160,15 +185,9 @@ function App() {
         content: '抱歉，发生了错误，请稍后重试。',
         timestamp: Date.now()
       }
-      const errorSession = {
-        ...updatedSession,
-        messages: [...updatedSession.messages, errorMessage]
-      }
-      setCurrentSession(errorSession)
-      const errorSessions = sessions.map(s => s.id === session.id ? errorSession : s)
-      saveSessions(errorSessions)
+      setMessages(prev => [...prev, errorMessage])
     }
-    
+
     setLoading(false)
   }
 
@@ -231,7 +250,7 @@ function App() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-800 truncate">{session.title}</p>
                     <p className="text-xs text-gray-400">
-                      {new Date(session.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+                      {new Date(session.updated_at).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
                     </p>
                   </div>
                   <button
@@ -249,7 +268,7 @@ function App() {
         <div className="p-3 border-t border-gray-200">
           <div className="flex items-center gap-2 text-sm">
             <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-yellow-500'}`} />
-            <span className="text-gray-500">{connected ? '已连接' : '模拟模式'}</span>
+            <span className="text-gray-500">{connected ? '已连接' : '离线'}</span>
           </div>
         </div>
       </aside>
@@ -269,16 +288,16 @@ function App() {
               <h2 className="text-lg font-semibold text-gray-800">
                 {currentSession?.title || '新会话'}
               </h2>
-              {currentSession?.createdAt && (
+              {currentSession?.created_at && (
                 <p className="text-xs text-gray-400">
-                  {new Date(currentSession.createdAt).toLocaleString('zh-CN', { 
+                  {new Date(currentSession.created_at).toLocaleString('zh-CN', { 
                     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
                   })}
                 </p>
               )}
             </div>
           </div>
-          {currentSession?.messages?.length > 0 && (
+          {messages.length > 0 && (
             <button 
               onClick={clearSession}
               className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -290,7 +309,7 @@ function App() {
 
         {/* 消息列表 */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {!currentSession || currentSession.messages.length === 0 ? (
+          {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center px-4">
               <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-primary-400 to-purple-500 flex items-center justify-center text-white mb-6 shadow-lg">
                 <Bot className="w-12 h-12" />
@@ -310,7 +329,7 @@ function App() {
               </div>
             </div>
           ) : (
-            currentSession.messages.map((msg, i) => (
+            messages.map((msg, i) => (
               <div 
                 key={i}
                 className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''} animate-fade-in`}
