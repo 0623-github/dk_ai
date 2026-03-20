@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { MessageCircle, Plus, Trash2, Send, Bot, User, Sparkles, Menu } from 'lucide-react'
 
-const API_BASE = import.meta.env.PROD ? '/api' : 'http://localhost:9090'
+const API_BASE = '/api'
 
 function App() {
   const [sessions, setSessions] = useState([])

@@ -9,7 +9,14 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:9090',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+      },
+      '/ping': {
+        target: 'http://localhost:9090',
+        changeOrigin: true,
+      },
+      '/chat': {
+        target: 'http://localhost:9090',
+        changeOrigin: true,
       }
     }
   }
