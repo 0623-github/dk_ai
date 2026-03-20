@@ -25,4 +25,8 @@ func customizedRegister(r *server.Hertz, wrapper *handler.Handler) {
 
 	// 消息管理
 	r.GET("/api/messages", wrapper.GetMessages)
+
+	// AI 配置
+	r.GET("/api/ai/config", wrapper.GetAIConfig)
+	r.GET("/api/ai/providers", wrapper.GetAvailableProviders)
 }

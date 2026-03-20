@@ -1,0 +1,22 @@
+# AI 模型配置
+# 支持多种模型提供商：ollama, openai, kimi
+
+# 默认使用的模型提供商
+provider: "ollama"
+
+# Ollama 本地模型配置
+ollama:
+  model: "gemma:2b"
+  baseURL: "http://localhost:11434/v1"
+
+# Kimi (Moonshot) 配置
+kimi:
+  model: "kimi-k2.5"
+  baseURL: "https://api.moonshot.cn/v1"
+  apiKey: ""  # 填写你的 Kimi API Key
+
+# OpenAI 配置（可选）
+openai:
+  model: "gpt-4"
+  baseURL: "https://api.openai.com/v1"
+  apiKey: ""  # 填写你的 OpenAI API Key

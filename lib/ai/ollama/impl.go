@@ -4,71 +4,98 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 
-	"github.com/0623-github/dk_ai/lib/ai"
-	"github.com/0623-github/dk_ai/lib/cache"
-	"github.com/0623-github/dk_ai/lib/cache/local"
 	"github.com/0623-github/dk_ai/lib/helper"
 	"github.com/cloudwego/hertz/cmd/hz/util/logs"
 	openai "github.com/sashabaranov/go-openai"
 )
 
+// ChatMessage 聊天消息
+type ChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// ChatRequest 聊天请求
+type ChatRequest struct {
+	User    string        `json:"user"`
+	Message string        `json:"message"`
+	History []ChatMessage `json:"history,omitempty"`
+}
+
 type Impl struct {
-	cache    cache.Cache
 	client   *openai.Client
 	model    string
 	baseURL  string
 	mockMode bool
-}
-
-type Config struct {
-	Model   string `yaml:"model"`
-	BaseURL string `yaml:"baseURL"`
+	mu       sync.RWMutex
 }
 
 func NewImpl(ctx context.Context) *Impl {
-	conf, err := helper.GetConfig[Config](ctx, helper.AIConfigPath)
+	// 读取新的配置格式
+	conf, err := helper.GetConfig[helper.AIConfig](ctx, helper.AIConfigPath)
 	if err != nil {
-		logs.Warnf("failed to load config: %v, using mock mode", err)
+		logs.Warnf("failed to load config: %v, using default ollama", err)
 		return &Impl{
-			cache:    local.NewImpl(),
 			mockMode: true,
 		}
+	}
+
+	// 如果配置指定了其他 provider，但我们要创建 Ollama 实例
+	// 使用 Ollama 配置
+	ollamaConf := conf.Ollama
+	if ollamaConf.Model == "" {
+		ollamaConf.Model = "gemma:2b"
+	}
+	if ollamaConf.BaseURL == "" {
+		ollamaConf.BaseURL = "http://localhost:11434/v1"
 	}
 
 	config := openai.DefaultConfig("")
-	config.BaseURL = conf.BaseURL
+	config.BaseURL = ollamaConf.BaseURL
 	client := openai.NewClientWithConfig(config)
 
-	_, err = client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model: conf.Model,
+	impl := &Impl{
+		client:  client,
+		model:   ollamaConf.Model,
+		baseURL: ollamaConf.BaseURL,
+	}
+
+	// 异步检查 Ollama 可用性
+	go impl.checkOllama(ctx)
+
+	logs.Infof("ollama impl created, model: %s, baseURL: %s", ollamaConf.Model, ollamaConf.BaseURL)
+	return impl
+}
+
+func (i *Impl) checkOllama(ctx context.Context) {
+	_, err := i.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: i.model,
 		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: "你好",
-			},
+			{Role: openai.ChatMessageRoleUser, Content: "hi"},
 		},
 	})
 	if err != nil {
-		logs.Warnf("ollama not available: %v, using mock mode", err)
-		return &Impl{
-			cache:    local.NewImpl(),
-			mockMode: true,
-		}
+		logs.Warnf("ollama check failed: %v, will use mock mode", err)
+		i.mu.Lock()
+		i.mockMode = true
+		i.mu.Unlock()
 	}
-
-	logs.Infof("ollama impl created, model: %s, baseURL: %s", conf.Model, conf.BaseURL)
-	return &Impl{cache: local.NewImpl(), client: client, model: conf.Model, baseURL: conf.BaseURL}
 }
 
-func (i *Impl) Chat(ctx context.Context, req ai.ChatRequest) (string, error) {
-	if i.mockMode {
+func (i *Impl) isMockMode() bool {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	return i.mockMode
+}
+
+func (i *Impl) Chat(ctx context.Context, req ChatRequest) (string, error) {
+	if i.isMockMode() {
 		return i.mockChat(req.Message), nil
 	}
 
-	// 构建消息列表（历史 + 当前消息）
 	messages := i.buildMessages(req)
-
 	resp, err := i.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:    i.model,
 		Messages: messages,
@@ -79,18 +106,11 @@ func (i *Impl) Chat(ctx context.Context, req ai.ChatRequest) (string, error) {
 	if len(resp.Choices) == 0 {
 		return "", errors.New("no choices")
 	}
-	firstChoice := resp.Choices[0]
-	if firstChoice.Message.Content == "" {
-		return "", errors.New("empty content")
-	}
-
-	return firstChoice.Message.Content, nil
+	return resp.Choices[0].Message.Content, nil
 }
 
-// ChatStream 流式聊天实现
-func (i *Impl) ChatStream(ctx context.Context, req ai.ChatRequest, callback func(string, bool)) error {
-	if i.mockMode {
-		// 模拟模式下逐字输出
+func (i *Impl) ChatStream(ctx context.Context, req ChatRequest, callback func(string, bool)) error {
+	if i.isMockMode() {
 		reply := i.mockChat(req.Message)
 		for j, char := range reply {
 			callback(string(char), j == len(reply)-1)
@@ -98,9 +118,7 @@ func (i *Impl) ChatStream(ctx context.Context, req ai.ChatRequest, callback func
 		return nil
 	}
 
-	// 构建消息列表
 	messages := i.buildMessages(req)
-
 	stream, err := i.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 		Model:    i.model,
 		Messages: messages,
@@ -120,20 +138,15 @@ func (i *Impl) ChatStream(ctx context.Context, req ai.ChatRequest, callback func
 			return err
 		}
 		if len(response.Choices) > 0 {
-			content := response.Choices[0].Delta.Content
-			callback(content, false)
+			callback(response.Choices[0].Delta.Content, false)
 		}
 	}
-
-	callback("", true) // 发送完成标记
+	callback("", true)
 	return nil
 }
 
-// buildMessages 构建 OpenAI 格式的消息列表
-func (i *Impl) buildMessages(req ai.ChatRequest) []openai.ChatCompletionMessage {
+func (i *Impl) buildMessages(req ChatRequest) []openai.ChatCompletionMessage {
 	messages := make([]openai.ChatCompletionMessage, 0)
-
-	// 添加历史消息
 	for _, h := range req.History {
 		role := openai.ChatMessageRoleUser
 		if h.Role == "assistant" {
@@ -146,27 +159,15 @@ func (i *Impl) buildMessages(req ai.ChatRequest) []openai.ChatCompletionMessage 
 			Content: h.Content,
 		})
 	}
-
-	// 添加当前消息
 	messages = append(messages, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleUser,
 		Content: req.Message,
 	})
-
 	return messages
-}
-
-var mockResponses = []string{
-	"你好！有什么我可以帮助你的吗？",
-	"我收到了你的消息。这是一个模拟回复，因为 Ollama 服务暂时不可用。",
-	"感谢你的提问！如果你启动了 Ollama 服务，我就能提供更智能的回答了。",
-	"我正在以模拟模式运行。请确保 Ollama 服务正在运行，然后我可以帮你与 AI 模型对话。",
-	"你好！我是 AI 助手。当前使用的是模拟模式响应。",
 }
 
 func (i *Impl) mockChat(message string) string {
 	msg := strings.ToLower(message)
-
 	if strings.Contains(msg, "你好") || strings.Contains(msg, "hello") || strings.Contains(msg, "hi") {
 		return "你好！很高兴见到你！有什么我可以帮助你的吗？"
 	}
@@ -179,6 +180,5 @@ func (i *Impl) mockChat(message string) string {
 	if strings.Contains(msg, "帮助") || strings.Contains(msg, "能做什么") {
 		return "我可以帮你：\n1. 回答问题\n2. 聊天对话\n3. 提供信息\n4. 编写代码\n\n注意：当前是模拟模式，启动 Ollama 后可获得更智能的回答。"
 	}
-
-	return mockResponses[len(message)%len(mockResponses)]
+	return "你好！我是 AI 助手。当前 Ollama 服务暂时不可用，这是模拟回复。"
 }

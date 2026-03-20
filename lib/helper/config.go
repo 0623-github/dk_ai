@@ -12,8 +12,29 @@ import (
 )
 
 const (
-	AIConfigPath = "conf/openai.yaml"
+	AIConfigPath = "conf/ai.yaml"
 )
+
+// AIConfig AI 配置
+type AIConfig struct {
+	Provider string         `yaml:"provider"`
+	Ollama   OllamaConfig   `yaml:"ollama"`
+	Kimi     OpenAICompatibleConfig `yaml:"kimi"`
+	OpenAI   OpenAICompatibleConfig `yaml:"openai"`
+}
+
+// OllamaConfig Ollama 配置
+type OllamaConfig struct {
+	Model   string `yaml:"model"`
+	BaseURL string `yaml:"baseURL"`
+}
+
+// OpenAICompatibleConfig OpenAI 兼容配置（Kimi、OpenAI 等）
+type OpenAICompatibleConfig struct {
+	Model   string `yaml:"model"`
+	BaseURL string `yaml:"baseURL"`
+	APIKey  string `yaml:"apiKey"`
+}
 
 // GetConfig 读取并解析YAML配置文件，支持泛型返回指定类型
 func GetConfig[T any](ctx context.Context, path string) (T, error) {

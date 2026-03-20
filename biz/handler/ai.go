@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/0623-github/dk_ai/biz/wrapper"
+	"github.com/0623-github/dk_ai/lib/helper"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
@@ -170,5 +171,75 @@ func (h *Handler) GetMessages(ctx context.Context, c *app.RequestContext) {
 	}
 	c.JSON(consts.StatusOK, map[string]interface{}{
 		"messages": messages,
+	})
+}
+
+// GetAIConfig 获取当前 AI 配置
+func (h *Handler) GetAIConfig(ctx context.Context, c *app.RequestContext) {
+	conf, err := helper.GetConfig[helper.AIConfig](ctx, "conf/ai.yaml")
+	if err != nil {
+		c.JSON(consts.StatusOK, map[string]interface{}{
+			"provider": "ollama",
+			"model":    "gemma:2b",
+		})
+		return
+	}
+
+	// 隐藏 API Key
+	safeConf := map[string]interface{}{
+		"provider": conf.Provider,
+		"ollama": map[string]string{
+			"model":   conf.Ollama.Model,
+			"baseURL": conf.Ollama.BaseURL,
+		},
+		"kimi": map[string]string{
+			"model":   conf.Kimi.Model,
+			"baseURL": conf.Kimi.BaseURL,
+		},
+		"openai": map[string]string{
+			"model":   conf.OpenAI.Model,
+			"baseURL": conf.OpenAI.BaseURL,
+		},
+	}
+	c.JSON(consts.StatusOK, safeConf)
+}
+
+// GetAvailableProviders 获取可用的模型提供商列表
+func (h *Handler) GetAvailableProviders(ctx context.Context, c *app.RequestContext) {
+	conf, err := helper.GetConfig[helper.AIConfig](ctx, "conf/ai.yaml")
+	if err != nil {
+		c.JSON(consts.StatusOK, map[string]interface{}{
+			"providers": []map[string]interface{}{
+				{"id": "ollama", "name": "Ollama (本地)", "available": true},
+			},
+		})
+		return
+	}
+
+	providers := []map[string]interface{}{
+		{"id": "ollama", "name": "Ollama (本地)", "model": conf.Ollama.Model, "available": true},
+	}
+
+	// Kimi 需要 API Key
+	kimiAvailable := conf.Kimi.APIKey != ""
+	providers = append(providers, map[string]interface{}{
+		"id":        "kimi",
+		"name":      "Kimi (Moonshot)",
+		"model":     conf.Kimi.Model,
+		"available": kimiAvailable,
+	})
+
+	// OpenAI 需要 API Key
+	openaiAvailable := conf.OpenAI.APIKey != ""
+	providers = append(providers, map[string]interface{}{
+		"id":        "openai",
+		"name":      "OpenAI",
+		"model":     conf.OpenAI.Model,
+		"available": openaiAvailable,
+	})
+
+	c.JSON(consts.StatusOK, map[string]interface{}{
+		"providers":        providers,
+		"current_provider": conf.Provider,
 	})
 }

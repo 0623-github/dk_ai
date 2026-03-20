@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/0623-github/dk_ai/lib/ai"
-	"github.com/0623-github/dk_ai/lib/ai/ollama"
 	"github.com/0623-github/dk_ai/lib/db"
 )
 
@@ -59,7 +58,11 @@ type Impl struct {
 }
 
 func NewImpl(ctx context.Context, database *db.DB) *Impl {
-	aiClient := ollama.NewImpl(ctx)
+	aiClient, err := ai.NewAI(ctx)
+	if err != nil {
+		// 如果创建失败，使用默认的 Ollama
+		aiClient, _ = ai.NewAIWithProvider(ctx, "ollama")
+	}
 	return &Impl{
 		AIClient: aiClient,
 		DB:       database,
