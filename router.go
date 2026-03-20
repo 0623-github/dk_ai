@@ -10,11 +10,11 @@ import (
 // customizeRegister registers customize routers.
 func customizedRegister(r *server.Hertz, wrapper *handler.Handler) {
 	// 健康检查
-	r.GET("/ping", handler.Ping)
+	r.GET("/api/ping", handler.Ping)
 
 	// 聊天接口
-	r.POST("/chat", wrapper.Chat)
-	r.POST("/chat/stream", wrapper.ChatStream)
+	r.POST("/api/chat", wrapper.Chat)
+	r.POST("/api/chat/stream", wrapper.ChatStream)
 
 	// 会话管理
 	r.POST("/api/sessions", wrapper.CreateSession)
